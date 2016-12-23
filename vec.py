@@ -2,7 +2,7 @@
 
 # TWO DIMENTIONAL VECTOR CLASS
 
-class TwoD:
+class TwoD(object):
 
     def __init__(self, x, y):
         self.x = float(x)
@@ -20,7 +20,7 @@ class TwoD:
     def __mul__(self, other):
         return TwoD(self.x * other, self.y * other)
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         return TwoD(self.x / other, self.y / other)
 
     def __iadd__(self, other):
@@ -33,7 +33,7 @@ class TwoD:
         self.y -= other.y
         return self
 
-    def __idiv__(self, other):
+    def __itruediv__(self, other):
         if isinstance(other, TwoD):
             self.x /= other.x if other.x else 1
             self.y /= other.y if other.y else 1

@@ -3,13 +3,35 @@ import mahotas
 import numpy as np
 import bird
 
-def generate_distance_field(width, height):
-    background = np.ones((width, height))
-    background[1:-1, 1:-1] = 0
-    background[width // 3, 0:(height // 6)] = 1
-    background[2 * width // 3, -(height // 6):] = 1
-    return background, mahotas.distance(background)
+def clamp(v, lo, hi):
+    return min(hi, max(v, lo))
 
+def generate_distance_field(width, height, segments):
+    background = np.ones((width, height))
+    segmaps = []
+
+    for seg in segments:
+        (x0, y0), (x1, y1) = seg
+        if x0 > x1:
+            x0, x1 = x1, x0
+        if y0 > y1:
+            y0, y1 = y1, y0
+        tmp = np.ones((width, height))
+        x0 = clamp(x0, 0, width - 1)
+        x1 = clamp(x1, 0, width - 1)
+        y0 = clamp(y0, 0, height - 1)
+        y1 = clamp(y1, 0, height - 1)
+        tmp[x0:x1+1, y0:y1+1] = 0
+        background[x0:x1+1, y0:y1+1] = 0
+        segmaps.append(mahotas.distance(tmp))
+
+    segstack = np.dstack(segmaps)
+    segstack = np.sort(segstack, 2)
+    closest = segstack[:, :, 0] + 1.0
+    next = segstack[:, :, 1] + 1.0
+    weight = next ** 2 / (next ** 2 + closest ** 2)
+    distances = weight * closest + (1.0 - weight) * next
+    return background, distances - 10
 
 def draw_bird(screen, pos, dir, type, bird_shape):
     dir = dir / dir.mag()
@@ -28,14 +50,22 @@ if __name__ == '__main__':
                   [0, -2],
                   [-10, -5]]
 
+    # generate background image and distance field
+    background_lines = [[(0, 0), (WIDTH, 0)],
+                        [(0, HEIGHT), (WIDTH, HEIGHT)],
+                        [(0, 0), (0, HEIGHT)],
+                        [(WIDTH, 0), (WIDTH, HEIGHT)],
+                        [(WIDTH // 3, HEIGHT // 6), (WIDTH // 3, 2 * HEIGHT // 6)],
+                        [(2 * WIDTH // 3, HEIGHT - HEIGHT // 6), (2 * WIDTH // 3, HEIGHT - 2 * HEIGHT // 6)]]
+    bg, dist = generate_distance_field(WIDTH, HEIGHT, background_lines)
+
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
 
-    # generate background image and distance field
-    bg, dist = generate_distance_field(WIDTH, HEIGHT)
-    bg_img = pygame.surfarray.make_surface(255 * (1 - np.dstack([bg] * 3)))
 
-    gradient = np.gradient(dist)
+    bg_img = pygame.surfarray.make_surface(255 * np.dstack([bg] * 3))
+
+    gradients = np.gradient(dist)
 
     birds = [bird.Bird(WIDTH, HEIGHT) for _ in range(NUM_BIRDS)]
     [b.set_type(1) for b in birds[::2]]
@@ -43,7 +73,7 @@ if __name__ == '__main__':
     while True:
         screen.blit(bg_img, (0, 0))
         for b in birds:
-            b.update(WIDTH, HEIGHT, birds)
+            b.update(dist, gradients, birds)
             draw_bird(screen, b.position, b.velocity, b.type, BIRD_SHAPE)
 
         pygame.display.flip()
